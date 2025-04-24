@@ -9,7 +9,7 @@ import RPi.GPIO as GPIO
 import re
 
 # GPIO SETUP
-channel = 4
+channel = 21
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(channel, GPIO.IN)
 
