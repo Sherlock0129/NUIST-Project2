@@ -7,6 +7,10 @@ import smtplib
 from email.message import EmailMessage
 import RPi.GPIO as GPIO
 import re
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from datetime import datetime
+import smtplib
 
 # GPIO SETUP
 channel = 21
@@ -24,20 +28,26 @@ def read_sensor():
     else:
         return "Water has been detected."
 
+
 def send_email(status):
     server = None
     try:
         print("Attempting to connect to QQ SMTP server...")
-        #Use SSL on port 465 for QQ Mail
+        # Use SSL on port 465 for QQ Mail
         server = smtplib.SMTP_SSL('smtp.qq.com', 465, timeout=10)
         print("Connected to SMTP server")
-        
+
         # Login to the server
         server.login(from_email_addr, from_email_pass)
         print("Logged in successfully")
 
-        # Create and send the email
-        msg = EmailMessage()
+        # Create a multipart email
+        msg = MIMEMultipart('alternative')
+        msg['From'] = from_email_addr
+        msg['To'] = to_email_addr
+        msg['Subject'] = 'Plant Moisture Status Update'
+
+        # Plain-text content (fallback)
         text_content = f"""
 ====================================
       Plant Moisture Status Update
@@ -55,11 +65,92 @@ Status: {status}
 Sent by your Raspberry Pi Plant Moisture Sensor
 ====================================
 """
-        msg.set_content(text_content)
-        msg['From'] = from_email_addr
-        msg['To'] = to_email_addr
-        msg['Subject'] = 'Plant Moisture Status Update'
-        
+        # HTML content with color-coded design
+        # Red/orange for dry, green for moist
+        header_color = '#ff4d4d' if 'No water detected' in status else '#4CAF50'
+        action_color = '#ff4d4d' if 'No water detected' in status else '#388E3C'
+        action_message = '*** Please water your plant soon to keep it healthy! ***' if 'No water detected' in status else 'Your plant is well-hydrated. No action needed.'
+
+        html_content = f"""
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    color: #333;
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                }}
+                .container {{
+                    border: 1px solid #ddd;
+                    border-radius: 8px;
+                    overflow: hidden;
+                    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                }}
+                .header {{
+                    background-color: {header_color};
+                    color: white;
+                    padding: 15px;
+                    text-align: center;
+                    font-size: 20px;
+                    font-weight: bold;
+                }}
+                .content {{
+                    padding: 20px;
+                    background-color: #f9f9f9;
+                }}
+                .status {{
+                    font-size: 18px;
+                    font-weight: bold;
+                    color: {action_color};
+                    margin: 10px 0;
+                }}
+                .action {{
+                    font-style: italic;
+                    color: {action_color};
+                    margin-top: 10px;
+                }}
+                .footer {{
+                    background-color: #f1f1f1;
+                    padding: 10px;
+                    text-align: center;
+                    font-size: 12px;
+                    color: #666;
+                }}
+                .timestamp {{
+                    font-size: 14px;
+                    color: #555;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    Plant Moisture Status Update
+                </div>
+                <div class="content">
+                    <p>Dear Plant Caretaker,</p>
+                    <p class="timestamp">Checked at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                    <p class="status">Status: {status}</p>
+                    <p class="action">{action_message}</p>
+                </div>
+                <div class="footer">
+                    Sent by your Raspberry Pi Plant Moisture Sensor
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        # Attach plain-text and HTML parts
+        part1 = MIMEText(text_content, 'plain')
+        part2 = MIMEText(html_content, 'html')
+        msg.attach(part1)
+        msg.attach(part2)
+
+        # Send the email
         server.send_message(msg)
         print(f"Email sent at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: {status}")
     except Exception as e:
@@ -79,8 +170,7 @@ def update_result(status):
 def immediate_check():
     status = read_sensor()
     update_result(status)
-    if "No water detected" in status:
-        send_email(status)
+    send_email(status)
     messagebox.showinfo("Detection result", status)
 
 def validate_time(time_str):
@@ -119,8 +209,8 @@ def set_schedule():
 def check_and_update():
     status = read_sensor()
     update_result(status)
-    if "No water detected" in status:
-        send_email(status)
+    send_email(status)
+
 
 def update_schedule_display():
     for i, label in enumerate(schedule_labels):
